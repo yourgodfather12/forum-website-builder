@@ -4,7 +4,8 @@ import subprocess
 # Step 1: Create virtual environment and install dependencies
 def setup_environment():
     os.system('python -m venv env')
-    os.system('env\\Scripts\\activate' if os.name == 'nt' else 'source env/bin/activate')
+    activate_script = 'env\\Scripts\\activate' if os.name == 'nt' else 'source env/bin/activate'
+    os.system(activate_script)
     os.system('pip install django djangorestframework django-cors-headers pillow djangorestframework-simplejwt channels channels-redis django-ratelimit django-allauth')
 
 # Step 2: Create Django project and app
@@ -17,8 +18,7 @@ def create_django_project():
 
 # Step 3: Configure models, views, serializers, and URLs
 def configure_django_app():
-    with open('core/models.py', 'w') as f:
-        f.write("""\
+    models_code = """\
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -42,10 +42,8 @@ class Post(models.Model):
     author = models.ForeignKey(User, related_name='posts', on_delete=models.CASCADE)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
-""")
-    
-    with open('core/serializers.py', 'w') as f:
-        f.write("""\
+"""
+    serializers_code = """\
 from rest_framework import serializers
 from .models import User, Category, Thread, Post
 
@@ -68,10 +66,8 @@ class PostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = '__all__'
-""")
-
-    with open('core/views.py', 'w') as f:
-        f.write("""\
+"""
+    views_code = """\
 from rest_framework import viewsets, pagination
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.decorators import action
@@ -128,17 +124,15 @@ class PostViewSet(viewsets.ModelViewSet):
     @ratelimit(key='ip', rate='10/m', method='GET', block=True)
     def search(self, request):
         query = request.query_params.get('q')
-        posts = self.queryset.filter(content__icontains=query)
+        posts = self.queryset.filter(content__icontains(query))
         page = self.paginate_queryset(posts)
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = self.get_serializer(posts, many=True)
         return Response(serializer.data)
-""")
-    
-    with open('core/urls.py', 'w') as f:
-        f.write("""\
+"""
+    urls_code = """\
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -156,10 +150,8 @@ urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('accounts/', include('allauth.urls')),
 ]
-""")
-
-    with open('wins/urls.py', 'w') as f:
-        f.write("""\
+"""
+    project_urls_code = """\
 from django.contrib import admin
 from django.urls import path, include
 
@@ -167,12 +159,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('core.urls')),
 ]
-""")
-    
-    # Configure settings.py
-    settings_path = 'wins/settings.py'
-    with open(settings_path, 'a') as f:
-        f.write("""\
+"""
+    settings_additions = """\
 
 # Additional configurations
 INSTALLED_APPS += [
@@ -219,10 +207,8 @@ CHANNEL_LAYERS = {
         },
     },
 }
-""")
-
-    with open('wins/asgi.py', 'w') as f:
-        f.write("""\
+"""
+    asgi_code = """\
 import os
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
@@ -239,10 +225,8 @@ application = ProtocolTypeRouter({
         )
     ),
 })
-""")
-    
-    with open('core/consumers.py', 'w') as f:
-        f.write("""\
+"""
+    consumers_code = """\
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from .models import Thread
@@ -270,18 +254,43 @@ class NotificationConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'message': event['message']
         }))
-""")
-
-    with open('core/routing.py', 'w') as f:
-        f.write("""\
+"""
+    routing_code = """\
 from django.urls import path
 from .consumers import NotificationConsumer
 
 websocket_urlpatterns = [
     path('ws/notifications/', NotificationConsumer.as_asgi()),
 ]
-""")
+"""
+    with open('core/models.py', 'w') as f:
+        f.write(models_code)
     
+    with open('core/serializers.py', 'w') as f:
+        f.write(serializers_code)
+    
+    with open('core/views.py', 'w') as f:
+        f.write(views_code)
+    
+    with open('core/urls.py', 'w') as f:
+        f.write(urls_code)
+    
+    with open('wins/urls.py', 'w') as f:
+        f.write(project_urls_code)
+
+    settings_path = 'wins/settings.py'
+    with open(settings_path, 'a') as f:
+        f.write(settings_additions)
+
+    with open('wins/asgi.py', 'w') as f:
+        f.write(asgi_code)
+
+    with open('core/consumers.py', 'w') as f:
+        f.write(consumers_code)
+
+    with open('core/routing.py', 'w') as f:
+        f.write(routing_code)
+
     os.system('python manage.py makemigrations core')
     os.system('python manage.py migrate')
 
@@ -293,8 +302,7 @@ def create_react_frontend():
     os.system('npm install axios react-router-dom @headlessui/react @heroicons/react tailwindcss postcss autoprefixer @ckeditor/ckeditor5-react @ckeditor/ckeditor5-build-classic react-toastify')
     os.system('npx tailwindcss init -p')
 
-    with open('tailwind.config.js', 'w') as f:
-        f.write("""\
+    tailwind_config = """\
 module.exports = {
   content: ['./src/**/*.{js,jsx,ts,tsx}'],
   darkMode: 'class', // Enable dark mode
@@ -303,14 +311,18 @@ module.exports = {
   },
   plugins: [],
 }
-""")
-
-    with open('src/index.css', 'w') as f:
-        f.write("""\
+"""
+    index_css = """\
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-""")
+"""
+
+    with open('tailwind.config.js', 'w') as f:
+        f.write(tailwind_config)
+    
+    with open('src/index.css', 'w') as f:
+        f.write(index_css)
 
 # Step 5: Configure React components
 def configure_react_app():
@@ -319,8 +331,7 @@ def configure_react_app():
     os.mkdir('pages')
     os.mkdir('services')
 
-    with open('components/Navbar.js', 'w') as f:
-        f.write("""\
+    navbar_code = """\
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
@@ -339,10 +350,8 @@ const Navbar = () => (
 );
 
 export default Navbar;
-""")
-
-    with open('pages/Home.js', 'w') as f:
-        f.write("""\
+"""
+    home_code = """\
 import React from 'react';
 
 const Home = () => (
@@ -352,10 +361,8 @@ const Home = () => (
 );
 
 export default Home;
-""")
-
-    with open('pages/Threads.js', 'w') as f:
-        f.write("""\
+"""
+    threads_code = """\
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import ReactPaginate from 'react-paginate';
@@ -404,10 +411,8 @@ const Threads = () => {
 };
 
 export default Threads;
-""")
-
-    with open('pages/Profile.js', 'w') as f:
-        f.write("""\
+"""
+    profile_code = """\
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useHistory } from 'react-router-dom';
@@ -458,10 +463,8 @@ const Profile = () => {
 };
 
 export default Profile;
-""")
-
-    with open('pages/Login.js', 'w') as f:
-        f.write("""\
+"""
+    login_code = """\
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useHistory } from 'react-router-dom';
@@ -508,10 +511,8 @@ const Login = () => {
 };
 
 export default Login;
-""")
-
-    with open('pages/Register.js', 'w') as f:
-        f.write("""\
+"""
+    register_code = """\
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useHistory } from 'react-router-dom';
@@ -564,10 +565,8 @@ const Register = () => {
 };
 
 export default Register;
-""")
-
-    with open('pages/CreateThread.js', 'w') as f:
-        f.write("""\
+"""
+    create_thread_code = """\
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useHistory } from 'react-router-dom';
@@ -623,10 +622,8 @@ const CreateThread = () => {
 };
 
 export default CreateThread;
-""")
-
-    with open('services/authService.js', 'w') as f:
-        f.write("""\
+"""
+    auth_service_code = """\
 import axios from 'axios';
 
 const API_URL = '/api/';
@@ -663,10 +660,8 @@ export default {
     login,
     logout,
 };
-""")
-
-    with open('App.js', 'w') as f:
-        f.write("""\
+"""
+    app_code = """\
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Route, Switch } from 'react-router-dom';
 import Navbar from './components/Navbar';
@@ -711,12 +706,37 @@ const App = () => {
 };
 
 export default App;
-""")
+"""
+    with open('components/Navbar.js', 'w') as f:
+        f.write(navbar_code)
+    
+    with open('pages/Home.js', 'w') as f:
+        f.write(home_code)
+    
+    with open('pages/Threads.js', 'w') as f:
+        f.write(threads_code)
+    
+    with open('pages/Profile.js', 'w') as f:
+        f.write(profile_code)
+    
+    with open('pages/Login.js', 'w') as f:
+        f.write(login_code)
+    
+    with open('pages/Register.js', 'w') as f:
+        f.write(register_code)
+    
+    with open('pages/CreateThread.js', 'w') as f:
+        f.write(create_thread_code)
+    
+    with open('services/authService.js', 'w') as f:
+        f.write(auth_service_code)
+    
+    with open('App.js', 'w') as f:
+        f.write(app_code)
 
 # Step 6: Integrate with backend
 def integrate_backend():
-    with open('setupProxy.js', 'w') as f:
-        f.write("""\
+    setup_proxy_code = """\
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 module.exports = function(app) {
@@ -728,13 +748,14 @@ module.exports = function(app) {
         })
     );
 };
-""")
+"""
+    with open('setupProxy.js', 'w') as f:
+        f.write(setup_proxy_code)
 
 # Step 7: Create Unit Tests
 def create_unit_tests():
     os.mkdir('core/tests')
-    with open('core/tests/test_models.py', 'w') as f:
-        f.write("""\
+    test_models_code = """\
 from django.test import TestCase
 from core.models import User, Category, Thread, Post
 
@@ -760,10 +781,8 @@ class ModelTests(TestCase):
         thread = Thread.objects.create(title='Test Thread', category=category, author=user)
         post = Post.objects.create(thread=thread, author=user, content='Test Post')
         self.assertEqual(post.content, 'Test Post')
-""")
-    
-    with open('core/tests/test_views.py', 'w') as f:
-        f.write("""\
+"""
+    test_views_code = """\
 from django.test import TestCase
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -791,7 +810,12 @@ class ViewTests(TestCase):
         response = self.client.get(url, {'q': 'Test'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertGreater(len(response.data), 0)
-""")
+"""
+    with open('core/tests/test_models.py', 'w') as f:
+        f.write(test_models_code)
+    
+    with open('core/tests/test_views.py', 'w') as f:
+        f.write(test_views_code)
 
 # Step 8: Run migrations and start the server
 def start_server():
